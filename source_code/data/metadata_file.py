@@ -6,7 +6,7 @@ os.getcwd()
 actors_df = pd.read_csv('data/raw/MovieSummaries/character.metadata.tsv', delimiter='\t', header=None)
 column_names = ['Wikipedia ID','Freebase movie ID','Movie release date', 'Character name', 'Actor dob', 'Gender', 'Height','Ethnicity','Actor','Age', 'Freebase character/actor map ID','Freebase character ID', 'Freebase actor ID']
 actors_df.columns = column_names
-actors_df.drop(['Movie release date', 'Character name', 'Actor dob', 'Gender', 'Height','Ethnicity','Age', 'Freebase character/actor map ID','Freebase character ID', 'Freebase actor ID'], axis=1, inplace=True)
+actors_df.drop(['Freebase movie ID','Movie release date', 'Character name', 'Actor dob', 'Gender', 'Height','Ethnicity','Age', 'Freebase character/actor map ID','Freebase character ID', 'Freebase actor ID'], axis=1, inplace=True)
 
 #retrieving metadata (name, year, genre) and putting them into a dataframe data
 data = pd.read_csv('data/raw/MovieSummaries/movie.metadata.tsv', delimiter='\t', header=None)
@@ -35,7 +35,7 @@ df = df_combined.groupby('Movie name').apply(select_top_actors)
 # reset the index to get rid of the groupby structure
 df = df.reset_index(drop=True)
 
-new_column_order = ['Wikipedia ID',	'Freebase movie ID','Movie name', 'Year', 'Genre', 'Actor']
+new_column_order = ['Wikipedia ID','Movie name', 'Year', 'Genre', 'Actor']
 df = df.reindex(columns=new_column_order)
 
-print(df.head(7))
+df.to_csv('Movies_metadata.csv', index = False)
