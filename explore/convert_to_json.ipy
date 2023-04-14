@@ -12,7 +12,7 @@ df = pd.read_csv('./Fact_Checking_model/data/processed/Plot_descriptions.csv')
 
 
 # loop over rows in dataframe and write each row as a separate line in the JSON file
-with open('Plot_descriptions.json', 'w') as f:
+with open('Plot_descript.json', 'w') as f:
     for index, row in df.iterrows():
-        record = {"id": row["Wikipedia ID"], "Movie name": row["Movie name"], "text": row["Plot"]}
+        record = {"id": row["Wikipedia ID"], "text": row["Plot"]}
         f.write(json.dumps(record) + '\n')
