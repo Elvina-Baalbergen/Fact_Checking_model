@@ -6,6 +6,14 @@ import spacy
 import random
 import json
 import os
+import pickle
+import google-cloud-translate as translate
+
+# Constants
+CHUNKPATH = './Fact_Checking_model/data/processed/Text_chunks.pkl'
+PAIR_CONSISTENT_PATH = './Fact_Checking_model/data/processed/Pair_Consistent.pkl'
+PAIR_UNRELATED_PATH = './Fact_Checking_model/data/processed/Pair_Unrelated.pkl'
+PLOTDESCRIPTIONPATH = 'Plot_descriptions.json'
 
 # DATASTRUCTURES
 class Chunk():
@@ -30,21 +38,41 @@ class Pair():
         self.Chunk = Chunk                  # String: content of the chunk
               
 def main():
-    print(os.getcwd())
-    filename = 'Plot_descriptions.json'
     # ALGORITHM 
-    dataset = load_data(filename)
-    divide_chunks(dataset)
-    #divide_chunks()
-    #save_chunks()
-    #create_pairs()
+
+    # Create Chunks from dataset if it doesn't already exist
+    chunks = None
+    if os.path.isfile(CHUNKPATH):
+        chunks =  load(CHUNKPATH)
+    else:
+        dataset = load_data(PLOTDESCRIPTIONPATH)
+        chunks = divide_chunks(dataset)
+        save(chunks, CHUNKPATH)
+
+    # Create Pairs from chunks if it doesn't already exist
+    consistent_pairs = None
+    if os.path.isfile(PAIR_CONSISTENT_PATH):
+        consistent_pairs =  load(PAIR_CONSISTENT_PATH)
+    else:
+        consistent_pairs = create_consistent_pairs(chunks)
+        save(consistent_pairs, PAIR_CONSISTENT_PATH)
+
+    unrelated_pairs=None
+    if os.path.isfile(PAIR_UNRELATED_PATH):
+        unrelated_pairs =  load(PAIR_UNRELATED_PATH)
+    else:
+        unrelated_pairs = create_unrelated_pairs(chunks)
+        save(unrelated_pairs, PAIR_UNRELATED_PATH)
+
     #backtranslate()
 
 def load_data(filename):
-    # Load data
-    # IN: filename
-    # OUT: records in the dataset (plot / reviews)
-    # in our case plots / movie reviews / metadata
+    '''
+    Load data
+    IN: filename
+    OUT: records in the dataset (plot / reviews)
+    in our case plots / movie reviews / metadata
+    '''
     dataset = []
     fileobj = open(filename)
 
@@ -56,16 +84,18 @@ def load_data(filename):
     return dataset
 
 def divide_chunks(dataset, max_n_tokens = 390):
-    # divide into chunks, only run if chunks do not exist yet
-    # IN: records in the dataset (plot / reviews)
-    # OUT: text chunks 
+    '''
+    divide into chunks, only run if chunks do not exist yet
+    IN: records in the dataset (plot / reviews)
+    OUT: text chunks 
+    '''
     tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
     nlp = spacy.load("en_core_web_sm")
 
     text_chunks = []
     moviesdone = 0
 
-    for movie in dataset[0:100]:
+    for movie in dataset[0:10]:
         text = movie['text']
         doc = nlp(text)
         sentences = list(doc.sents)
@@ -96,53 +126,72 @@ def divide_chunks(dataset, max_n_tokens = 390):
         myNewChunk = Chunk("plot", 31186339, 'The Hunger Games', current_chunk, current_chunk_len)
         text_chunks.append(myNewChunk) 
         moviesdone +=1
-        print(moviesdone)
 
-    print(text_chunks) 
+    return text_chunks
 
-def save_chunks(text_chunks, filename = 'Text_chunks.json'):
+def save(text_chunks, filename):
     # -- Save the chunks to a JSON file
     # IN: text chunks
     # OUT: filename with saved text chunks
-    with open(filename, 'w') as f:
-        json.dump(text_chunks, f)
-    return filename
-        
-def create_pairs(filename):
-    # Select random sentences from chunk and save the pair, only run if pairs do not exist yet
-    # -- Save the sentences (create SET)
-    # IN: filename (chunks)
-    # OUT: file with pairs
-    
-    # Load the text chunks from the specified file
-    with open(filename, 'r') as f:
-        text_chunks = json.load(f)
+    with open(filename, 'wb') as f:
+        pickle.dump(text_chunks, f)
 
-    # Initialize an empty list to store the pairs
+def load(filename):
+    with open(filename, 'rb') as f:
+        return pickle.load(f)   
+    
+def create_consistent_pairs(text_chunks):
+    '''
+    Select random sentences from chunk and save the pair, only run if pairs do not exist yet
+    -- Save the sentences (create SET)
+    IN:  chunks
+    OUT: pairs
+    '''
+    
+    nlp = spacy.load("en_core_web_sm")
     pairs = []
 
     # Iterate over each text chunk
     for chunk in text_chunks:
         # Select a random sentence from the chunk
-        sentence = random.choice(chunk.split('. '))
+        doc = nlp(chunk.Chunk)
+        sentences = list(doc.sents)
+        sentence = str(random.choice(sentences))
 
         # Create a pair consisting of the selected sentence and the chunk
-        pair = {'Sentence': sentence, 'Chunk': chunk}
+        pair = Pair(chunk.Type, chunk.ID, chunk.MovieName, 'Consistent', False, False, False, sentence, chunk.Chunk)
 
         # Add the pair to the list of pairs
         pairs.append(pair)
 
-    # Shuffle the list of pairs
-    # If we simply create pairs in the order that the chunks appear in the text_chunks list, we could end up with pairs that are biased towards the beginning or end of the list, depending on how the chunks are ordered. 
-    # This could introduce a systematic bias into our data that we might not be aware of.
-    random.shuffle(pairs)
+    return pairs
 
-    # Save the pairs to a JSON file
-    with open('pairs.json', 'w') as f:
-        json.dump(pairs, f)
+def create_unrelated_pairs(text_chunks):
+    '''
+    Select a random sentence from text chunks, select random text chunk (except the 1st one) and make pairs unrelated sentence + text chunk.
+    -- select a random sentence from a text chunk.
+    -- select a random text chunk.
+    -- create an unrelated pair.
+    IN: chunks
+    OUT: pairs
+    '''    
+    nlp = spacy.load("en_core_web_sm")
+    unrelated_pairs = []
 
-    return 'pairs.json'
+    for chunk in text_chunks:
+        # Select a random sentence from the chunk
+        doc = nlp(chunk.Chunk)
+        sentences = list(doc.sents)
+        sentence = str(random.choice(sentences))
 
+        # Select a random text chunk:
+        unrelated_chunk = random.choice([text_chunk for text_chunk in text_chunks if text_chunk != chunk])
+
+        # Create an unrelated pair
+        pair = Pair(chunk.Type, chunk.ID, chunk.MovieName, 'Unrelated', False, False, False, sentence, unrelated_chunk.Chunk)
+        unrelated_pairs.append(pair)
+
+    return unrelated_pairs    
 
 def backtranslate(pair):
     # Backtranslate selected sentence from the chunk
