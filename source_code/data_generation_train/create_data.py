@@ -7,13 +7,15 @@ import random
 import json
 import os
 import pickle
-import google-cloud-translate as translate
+from google.cloud import translate_v2 as translate
 
 # Constants
+PLOTDESCRIPTIONPATH = 'Plot_descriptions.json'
 CHUNKPATH = './Fact_Checking_model/data/processed/Text_chunks.pkl'
 PAIR_CONSISTENT_PATH = './Fact_Checking_model/data/processed/Pair_Consistent.pkl'
 PAIR_UNRELATED_PATH = './Fact_Checking_model/data/processed/Pair_Unrelated.pkl'
-PLOTDESCRIPTIONPATH = 'Plot_descriptions.json'
+PAIR_CONSISTENT_BACKTRANSLATED_PATH = './Fact_Checking_model/data/processed/Pair_Consistent_Backtranslated.pkl'
+
 
 # DATASTRUCTURES
 class Chunk():
@@ -36,10 +38,14 @@ class Pair():
         self.Augmentation = Augmentation    # String: people, names, places, things, medical terms, sports names, dates, music genres, job titles, numbers
         self.Sentence = Sentence            # String: a randomly chosen sentence from the chunk
         self.Chunk = Chunk                  # String: content of the chunk
+    
+    def __str__(self) -> str:
+        return f"BACKTRANSLATED: {self.Backtranslate}\n\n SENTENCE: {self.Sentence}\n\n CHUNK: {self.Chunk}" 
+
+    
               
 def main():
     # ALGORITHM 
-
     # Create Chunks from dataset if it doesn't already exist
     chunks = None
     if os.path.isfile(CHUNKPATH):
@@ -63,8 +69,17 @@ def main():
     else:
         unrelated_pairs = create_unrelated_pairs(chunks)
         save(unrelated_pairs, PAIR_UNRELATED_PATH)
+    
+    # Backtranslate the consistent Pairs
+    backtranslated_pairs = None
+    if os.path.isfile(PAIR_CONSISTENT_BACKTRANSLATED_PATH):
+        backtranslated_pairs =  load(PAIR_CONSISTENT_BACKTRANSLATED_PATH)
+    else:
+        backtranslated_pairs = backtranlate_Pairs(consistent_pairs[:3])
+        save(backtranslated_pairs, PAIR_CONSISTENT_BACKTRANSLATED_PATH)
 
-    #backtranslate()
+    # Create inconstistency in the data
+    
 
 def load_data(filename):
     '''
@@ -193,16 +208,35 @@ def create_unrelated_pairs(text_chunks):
 
     return unrelated_pairs    
 
-def backtranslate(pair):
-    # Backtranslate selected sentence from the chunk
-    # IN: pairs
-    # OUT: pairs with backtranslated sentence
-        # Language settings in intialisation
-        # use google Translate API for making backtranslation
-        # return new set
-    # -- Save the Sets
-    pairs_backtranslated = None
-    return pairs_backtranslated
+def backtranslate(sentence, source_lang="en", translation_lang="de"):
+    '''
+    Backtranslate selected sentence from the chunk
+    IN: text
+    OUT: Back translated source text
+        Language settings in intialisation
+        use google Translate API for making backtranslation
+    '''
+    
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"]="./factchecking-384919-c2225d838536.json"
+    translator = translate.Client()
+
+    forward_translation = translator.translate(sentence, target_language=translation_lang, format_="text")
+    back_translation = translator.translate(forward_translation["translatedText"], target_language=source_lang, format_="text")
+
+    return back_translation["translatedText"]
+
+def backtranlate_Pairs(pairs):
+    '''
+    translates pairs from German to English to paraphrase the initial phrases.
+    IN: pairs in a foreign language
+    OUT: backtranslated pairs 
+    '''
+
+    for pair in pairs:
+        pair.Sentence = backtranslate(pair.Sentence)
+        pair.Backtranslate = True
+
+    return pairs
 
 
 if __name__ == "__main__":
