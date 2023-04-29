@@ -34,15 +34,14 @@ class Pair():
         self.TrueLabel = TrueLabel          # String: null, 'Consistent", "Inconsistent", "Unrelated"
         self.Backtranslate = Backtranslate  # Boolean: true / false 
         self.Noise = Noise                  # Boolean: true / false 
-        self.Augmentation = Augmentation    # String: pronouns, spacy entities
-        
-        #people, names, places, things, medical terms, sports names, dates, music genres, job titles, numbers
-
+        self.Augmentation = Augmentation    # String: pronouns, noise, negation, "PERSON", "NORP", "FAC", "ORG", "GPE", "LOC", "PRODUCT", "EVENT", 
+                                            #         "WORK_OF_ART", "LANGUAGE", "DATE", "TIME", "MONEY", "QUANTITY", "ORDINAL"
         self.Sentence = Sentence            # String: a randomly chosen sentence from the chunk
         self.Chunk = Chunk                  # String: content of the chunk
     
     def __str__(self) -> str:
-        return f"BACKTRANSLATED: {self.Backtranslate}\n\n SENTENCE: {self.Sentence}\n\n CHUNK: {self.Chunk}" 
+        state = f"BACKTRANSLATED:{self.Backtranslate} NOISE:{self.Noise} AUGMENTATION:{self.Augmentation}"
+        return f"{state}\n\nSENTENCE: {self.Sentence}\n\nCHUNK: {self.Chunk}\n\n\n" 
 
 # ALGORITHM             
 def main():
@@ -78,18 +77,11 @@ def main():
         backtranslated_pairs = backtranlate_Pairs(consistent_pairs[:3])
         save(backtranslated_pairs, PAIR_CONSISTENT_BACKTRANSLATED_PATH)
 
-    print(backtranslated_pairs[1].Sentence)
-    newpair = swap_entities(backtranslated_pairs[1])
-    print(newpair.Sentence)
-
+    newpairs, unmodified_pairs = negate_sentence_Pairs(backtranslated_pairs)
     
-    # Create inconstistency in the data
-    # 1: Replace/swap entities
-    # 2: Add negation
-    # 3: Replace/swap numbers
-    # 4: Swap dates
-    # 5: Swap pronouns
-    # 5: Add noise (all examples of inconsistencies)
+    print(newpairs)
+    for pair in newpairs:
+        print(pair)
     
 
 def load_data(filename):
@@ -308,7 +300,7 @@ def swap_pronouns_Pairs(pairs):
     '''  
 
     transformed_pairs = []
-    unmodified_pairs =[]
+    unmodified_pairs = []
 
     for pair in pairs:
         returnedPair = swap_pronouns(pair)
@@ -317,11 +309,11 @@ def swap_pronouns_Pairs(pairs):
         else:
             transformed_pairs.append(returnedPair)
 
-    return pairs
+    return transformed_pairs, unmodified_pairs
 
 def swap_entities(pair):
     '''
-    Take in a Pair, and replace all instances of a random entity, with another one.
+    Take in a Pair, and replace one instance of a random entity, with another one.
     IN: consistent pair
     OUT: inconsistent pair with an entity swap
     '''
@@ -350,7 +342,7 @@ def swap_entities(pair):
     doc_Sentence = nlp(pair.Sentence)
     doc_Chunk = nlp(pair.Chunk)
 
-    # list enities present in the sentence
+    # list entities present in the sentence
     entities_in_Sentence = [entity for entity in doc_Sentence.ents if entity.label_ in swappable_entities]
     entities_in_Chunk = [entity for entity in doc_Chunk.ents if entity.label_ in swappable_entities]
 
@@ -363,13 +355,16 @@ def swap_entities(pair):
     max_attempts = len(swappable_entities)
     attempts = 0
 
+    
+
     while not possible_replacement_entities:
         entity_to_replace = random.choice(entities_in_Sentence)
         possible_replacement_entities = [enitity for enitity in entities_in_Chunk if (enitity.label_ == entity_to_replace.label_ and enitity.text != entity_to_replace.text)]
+        attempts +=1
 
         if attempts > max_attempts:
             return None
-    
+        
     chosen_replacement = random.choice(possible_replacement_entities)
 
     # Replace chosen entity
@@ -382,6 +377,164 @@ def swap_entities(pair):
     pair.Augmentation = entity_to_replace.label_
 
     return pair
+
+def swap_enitities_Pairs(pairs):
+    '''
+    Swaps entities on all the provided pairs
+    IN: list of consistent pairs
+    OUT: list of modified pairs
+    '''  
+    transformed_pairs = []
+    unmodified_pairs = []
+
+    for pair in pairs:
+        returnedPair = swap_entities(pair)
+        if returnedPair == None:
+            unmodified_pairs.append(pair)
+        else:
+            transformed_pairs.append(returnedPair)
+
+    return transformed_pairs, unmodified_pairs
+
+def add_noise(pair):
+    '''
+    Add noise (delete add duplicate word) to provided pair
+    IN: consistent pair
+    OUT: inconsistent pair with noise
+    '''
+    
+    DELETIONCHANCE = 0.05
+    DUPLICATIONCHANCE = 0.05
+
+    split_sentence = pair.Sentence.split(' ')
+    rebuild_sentence_split = []
+    noise_added = False
+
+    while not noise_added:
+        for word in split_sentence:
+            if random.random() < DELETIONCHANCE:
+                # skip so dont add to rebuild sentence list
+                pass
+            elif random.random() < DUPLICATIONCHANCE:
+                noise_added = True
+                rebuild_sentence_split.append(word)
+                rebuild_sentence_split.append(word)
+            else:
+                noise_added = True
+                rebuild_sentence_split.append(word)
+
+    rebuild_sentence = " ".join(rebuild_sentence_split)
+
+    # Return edited pair
+    pair.Sentence = rebuild_sentence
+    pair.Augmentation = "noise"
+
+    return pair
+
+def add_noise_Pairs(pairs):
+    for pair in pairs:
+        pair = add_noise(pair)
+
+    return pairs
+    
+def negate_sentence(pair):
+    '''
+    Turn a sentence into a negative sentence or remove negation and build a positive sentence
+    IN: consistent pair
+    OUT: inconsistent pair with/without negation
+    '''
+    
+    negatable_words = ("am", "are", "is", "was", "were", "have", "has", "had",
+                        "do", "does", "did", "can", "ca", "could", "may",
+                        "might", "must", "shall", "should", "will", "would")
+    
+    negation_words = ["not", "n't"]
+    not_only_words = ["am", "may", "might", "must", "shall", "will"]
+
+    nlp = spacy.load("en_core_web_sm")
+    doc_Sentence = nlp(pair.Sentence)    
+
+    # get list of words that could be negated, and choose a random one
+    candidate_words = [word for word in doc_Sentence if word.text in negatable_words]
+    word_to_negate = random.choice(candidate_words)
+    
+    if not word_to_negate:
+        return None
+    
+    word_index = word_to_negate.i
+    next_word = doc_Sentence[word_index + 1]
+    
+    # check wether text is negative or positive
+    is_negative = False
+
+    if len(doc_Sentence) > (word_index + 1):
+        if next_word.text in negation_words:
+            is_negative = True
+
+    # Negate current sentence
+    doc_Sentence_words = [token.text_with_ws for token in doc_Sentence]
+
+    if  is_negative:
+        # remove negation word
+        doc_Sentence_words.pop(word_index + 1)
+
+        # cannot needs an extra space
+        if word_to_negate.text.lower() == "can":
+            doc_Sentence_words[word_index] =  doc_Sentence_words[word_index] + " "  
+
+        # if negation word was n't need to add n back to the end of can
+        if next_word.text.lower() == "n't":
+            if word_to_negate.text.lower() == "ca":
+                 doc_Sentence_words[word_index] = "can" if doc_Sentence_words[word_index].islower() else "Can"
+                
+            doc_Sentence_words[word_index] =  doc_Sentence_words[word_index] + " "   
+
+
+
+    elif not is_negative:
+        # choose negation to add
+        negation = None
+        if word_to_negate.text in not_only_words:
+            negation = "not "    
+        else:
+            negation = "not " #random.choice(negation_words)
+
+        # set next token to be the negation token
+        doc_Sentence_words.insert(word_index + 1,negation)
+
+        # if n't was chosen n needs to be removed for can't
+        if negation == "n't ":
+            if word_to_negate.text.lower() == "can ":
+                doc_Sentence_words[word_index] = "ca" if doc_Sentence_words[word_index].islower() else "Ca"
+            else: # remove the space
+                doc_Sentence_words[word_index] = doc_Sentence_words[word_index][:-1]
+                
+        # if not was chosen space needs to be removed for cannot
+        if negation == "not ":
+            if word_to_negate.text.lower() == "can":
+                doc_Sentence_words[word_index] = doc_Sentence_words[word_index][:-1]
+    
+    negated_sentence =  "".join(doc_Sentence_words)
+
+    # Return edited pair
+    pair.Sentence = negated_sentence
+    pair.Augmentation = "negation"
+
+    return pair
+
+def negate_sentence_Pairs(pairs):
+    transformed_pairs = []
+    unmodified_pairs = []
+
+    for pair in pairs:
+        returnedPair = negate_sentence(pair)
+        if returnedPair == None:
+            unmodified_pairs.append(pair)
+        else:
+            transformed_pairs.append(returnedPair)
+
+    return transformed_pairs, unmodified_pairs
+
 
 if __name__ == "__main__":
     main()
