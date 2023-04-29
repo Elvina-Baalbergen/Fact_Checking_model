@@ -16,7 +16,6 @@ PAIR_CONSISTENT_PATH = './Fact_Checking_model/data/processed/Pair_Consistent.pkl
 PAIR_UNRELATED_PATH = './Fact_Checking_model/data/processed/Pair_Unrelated.pkl'
 PAIR_CONSISTENT_BACKTRANSLATED_PATH = './Fact_Checking_model/data/processed/Pair_Consistent_Backtranslated.pkl'
 
-
 # DATASTRUCTURES
 class Chunk():
     def __init__(self, type, ID, MovieName, Chunk, NrTokens):
@@ -35,17 +34,18 @@ class Pair():
         self.TrueLabel = TrueLabel          # String: null, 'Consistent", "Inconsistent", "Unrelated"
         self.Backtranslate = Backtranslate  # Boolean: true / false 
         self.Noise = Noise                  # Boolean: true / false 
-        self.Augmentation = Augmentation    # String: people, names, places, things, medical terms, sports names, dates, music genres, job titles, numbers
+        self.Augmentation = Augmentation    # String: pronouns, spacy entities
+        
+        #people, names, places, things, medical terms, sports names, dates, music genres, job titles, numbers
+
         self.Sentence = Sentence            # String: a randomly chosen sentence from the chunk
         self.Chunk = Chunk                  # String: content of the chunk
     
     def __str__(self) -> str:
         return f"BACKTRANSLATED: {self.Backtranslate}\n\n SENTENCE: {self.Sentence}\n\n CHUNK: {self.Chunk}" 
 
-    
-              
+# ALGORITHM             
 def main():
-    # ALGORITHM 
     # Create Chunks from dataset if it doesn't already exist
     chunks = None
     if os.path.isfile(CHUNKPATH):
@@ -78,7 +78,18 @@ def main():
         backtranslated_pairs = backtranlate_Pairs(consistent_pairs[:3])
         save(backtranslated_pairs, PAIR_CONSISTENT_BACKTRANSLATED_PATH)
 
+    print(backtranslated_pairs[1].Sentence)
+    newpair = swap_entities(backtranslated_pairs[1])
+    print(newpair.Sentence)
+
+    
     # Create inconstistency in the data
+    # 1: Replace/swap entities
+    # 2: Add negation
+    # 3: Replace/swap numbers
+    # 4: Swap dates
+    # 5: Swap pronouns
+    # 5: Add noise (all examples of inconsistencies)
     
 
 def load_data(filename):
@@ -238,6 +249,139 @@ def backtranlate_Pairs(pairs):
 
     return pairs
 
+def swap_pronouns(pair):
+    '''
+    Take in a Pair, and replace all instances of a random pronoun, with another one.
+    IN: consistent pair
+    OUT: inconsistent pair with a pronoun swap
+    '''
+
+    # you & it can be both subject or object so left out
+    pronoun_classes = { 
+        "SUBJECT": ["i", "he", "she", "we", "they"], 
+        "OBJECT": ["me", "him", "her", "us", "them"],
+        "POSSESSIVE": ["my", "its", "your", "his", "her",  "our", "your", "their"],
+        "REFLEXIVE": ["myself", "itself", "yourself",  "himself", "herself",  "ourselves", "yourselves", "themselves"]
+    }
+
+    pronouns = [pronoun for (key,value) in pronoun_classes.items() for pronoun in value]
+    pronoun_class_map = {pronoun: key  for (key, values) in pronoun_classes.items() for pronoun in values}
+
+    # get a Set of pronouns in the sentence, Check if there were any, if not then stop
+    Sentence_words = pair.Sentence.lower().split(' ')
+    pronouns_in_sentence = {pronoun for pronoun in pronouns if pronoun in Sentence_words}
+
+    if not pronouns_in_sentence:
+        return None
+
+    # Choose a random pronoun from the list of found pronouns, and choose pronoun to replace it with
+    pronoun_to_replace = random.choice(tuple(pronouns_in_sentence))
+    pronoun_replacement_class = pronoun_class_map[pronoun_to_replace]
+    replacement_pronoun = random.choice([pronoun for pronoun in pronoun_classes[pronoun_replacement_class] if pronoun != pronoun_to_replace])
+
+     # Replace all instances of the pronoun
+    split_sentence = Sentence_words = pair.Sentence.split(' ')
+    rebuild_sentence_split = []
+
+    for word in split_sentence:
+        if (word.lower() == pronoun_to_replace):
+            if word.isupper():
+                rebuild_sentence_split.append(replacement_pronoun.upper())
+            else:
+                rebuild_sentence_split.append(replacement_pronoun)
+        else:
+            rebuild_sentence_split.append(word)
+
+    rebuild_sentence = " ".join(rebuild_sentence_split)
+
+    # Return edited pair
+    pair.Sentence = rebuild_sentence
+    pair.Augmentation = "pronouns"
+
+    return pair
+
+def swap_pronouns_Pairs(pairs):
+    '''
+    Swaps pronouns on all the provided pairs
+    IN: list of consistent pairs
+    OUT: list of modified pairs, list of unmodified pairs because no pronouns were in the original sentence 
+    '''  
+
+    transformed_pairs = []
+    unmodified_pairs =[]
+
+    for pair in pairs:
+        returnedPair = swap_pronouns(pair)
+        if returnedPair == None:
+            unmodified_pairs.append(pair)
+        else:
+            transformed_pairs.append(returnedPair)
+
+    return pairs
+
+def swap_entities(pair):
+    '''
+    Take in a Pair, and replace all instances of a random entity, with another one.
+    IN: consistent pair
+    OUT: inconsistent pair with an entity swap
+    '''
+
+    swappable_entities = ["PERSON", "NORP", "FAC", "ORG", "GPE", "LOC", "PRODUCT", "EVENT", "WORK_OF_ART", 
+                          "LANGUAGE", "DATE", "TIME", "MONEY", "QUANTITY", "ORDINAL"]
+    # From spacy docs:
+    # PERSON:      People, including fictional.
+    # NORP:        Nationalities or religious or political groups.
+    # FAC:         Buildings, airports, highways, bridges, etc.
+    # ORG:         Companies, agencies, institutions, etc.
+    # GPE:         Countries, cities, states.
+    # LOC:         Non-GPE locations, mountain ranges, bodies of water.
+    # PRODUCT:     Objects, vehicles, foods, etc. (Not services.)
+    # EVENT:       Named hurricanes, battles, wars, sports events, etc.
+    # WORK_OF_ART: Titles of books, songs, etc.
+    # LANGUAGE:    Any named language.
+    # DATE:        Absolute or relative dates or periods.
+    # TIME:        Times smaller than a day.
+    # MONEY:       Monetary values, including unit.
+    # QUANTITY:    Measurements, as of weight or distance.
+    # ORDINAL:     “first”, “second”, etc.
+
+    # Initiate Spacy object and pass it the sentence and chunk    
+    nlp = spacy.load("en_core_web_sm")
+    doc_Sentence = nlp(pair.Sentence)
+    doc_Chunk = nlp(pair.Chunk)
+
+    # list enities present in the sentence
+    entities_in_Sentence = [entity for entity in doc_Sentence.ents if entity.label_ in swappable_entities]
+    entities_in_Chunk = [entity for entity in doc_Chunk.ents if entity.label_ in swappable_entities]
+
+    if not entities_in_Sentence:
+        return None
+
+    # Choose an entity from the Sentence to swap. 
+    entity_to_replace = None 
+    possible_replacement_entities = None 
+    max_attempts = len(swappable_entities)
+    attempts = 0
+
+    while not possible_replacement_entities:
+        entity_to_replace = random.choice(entities_in_Sentence)
+        possible_replacement_entities = [enitity for enitity in entities_in_Chunk if (enitity.label_ == entity_to_replace.label_ and enitity.text != entity_to_replace.text)]
+
+        if attempts > max_attempts:
+            return None
+    
+    chosen_replacement = random.choice(possible_replacement_entities)
+
+    # Replace chosen entity
+    sentence_before = doc_Sentence.text[:entity_to_replace.start_char]
+    sentence_after = doc_Sentence.text[entity_to_replace.end_char:]
+    sentence_replaced = sentence_before + chosen_replacement.text + sentence_after
+
+    # Return edited pair
+    pair.Sentence = sentence_replaced
+    pair.Augmentation = entity_to_replace.label_
+
+    return pair
 
 if __name__ == "__main__":
     main()
