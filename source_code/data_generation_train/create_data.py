@@ -17,6 +17,12 @@ REVIEW_CHUNKPATH = './Fact_Checking_model/data/processed/Text_chunks_reviews.pkl
 PAIR_CONSISTENT_PATH = './Fact_Checking_model/data/processed/Pair_Consistent.pkl'
 PAIR_UNRELATED_PATH = './Fact_Checking_model/data/processed/Pair_Unrelated.pkl'
 PAIR_CONSISTENT_BACKTRANSLATED_PATH = './Fact_Checking_model/data/processed/Pair_Consistent_Backtranslated.pkl'
+PAIR_INCONSISTENT_BACKTRANSLATED_PATH = './Fact_Checking_model/data/processed/Pair_Inconsistent_Backtranslated.pkl'
+
+PERCENT_PRONOUN = 0.25
+PERCENT_ENTITY = 0.25
+PERCENT_NEGATION = 0.25
+PERCENT_NOISE = 0.25
 
 # DATASTRUCTURES
 class Chunk():
@@ -60,7 +66,6 @@ def main():
         plot_chunks = divide_chunks(dataset, "plot")
         save(plot_chunks, PLOT_CHUNKPATH)
 
-
     # Create Chunks from Reviews dataset if it doesn't already exist
     review_chunks = None
     if os.path.isfile(REVIEW_CHUNKPATH):
@@ -94,12 +99,25 @@ def main():
     if os.path.isfile(PAIR_CONSISTENT_BACKTRANSLATED_PATH):
         backtranslated_pairs =  load(PAIR_CONSISTENT_BACKTRANSLATED_PATH)
     else:
-        backtranslated_pairs = backtranlate_Pairs(consistent_pairs[:3])
+        backtranslated_pairs = backtranlate_Pairs(consistent_pairs)
         save(backtranslated_pairs, PAIR_CONSISTENT_BACKTRANSLATED_PATH)
 
-    newpairs, unmodified_pairs = negate_sentence_Pairs(backtranslated_pairs)
+    # Create Inconsistent examples
+    inconsisten_pairs = None
+    if os.path.isfile(PAIR_INCONSISTENT_BACKTRANSLATED_PATH):
+        inconsisten_pairs =  load(PAIR_INCONSISTENT_BACKTRANSLATED_PATH)
+    else:
+        random.shuffle(backtranslated_pairs)
+        pronoun_swapped_pairs, umodified_swappped_pairs = swap_pronouns_Pairs(backtranslated_pairs[:int(len(backtranslated_pairs) * PERCENT_PRONOUN)])
+        entity_swapped_pairs, unmodified_entity_swapped_pairs = swap_enitities_Pairs(backtranslated_pairs[int(len(backtranslated_pairs) * PERCENT_PRONOUN):int(len(backtranslated_pairs) * (PERCENT_ENTITY + PERCENT_PRONOUN))])
+        negated_pairs, unmodified_negated_pairs = negate_sentence_Pairs(backtranslated_pairs[int(len(backtranslated_pairs) * (PERCENT_PRONOUN + PERCENT_ENTITY)):int(len(backtranslated_pairs) * (PERCENT_PRONOUN + PERCENT_ENTITY + PERCENT_NEGATION))])
+        noise_pairs = add_noise_Pairs(backtranslated_pairs[int(len(backtranslated_pairs) * (PERCENT_PRONOUN + PERCENT_ENTITY + PERCENT_NEGATION)):int(len(backtranslated_pairs) * (PERCENT_PRONOUN + PERCENT_ENTITY + PERCENT_NEGATION + PERCENT_NOISE))])
+        inconsisten_pairs = pronoun_swapped_pairs + entity_swapped_pairs + negated_pairs + noise_pairs
+        random.shuffle(inconsisten_pairs)
+        
+        save(inconsisten_pairs, PAIR_INCONSISTENT_BACKTRANSLATED_PATH)
 
-    for pair in backtranslated_pairs:
+    for pair in inconsisten_pairs:
        print(pair)
 
 def load_csv(filename):
@@ -493,6 +511,9 @@ def negate_sentence(pair):
 
     # get list of words that could be negated, and choose a random one
     candidate_words = [word for word in doc_Sentence if word.text in negatable_words]
+    if not candidate_words:
+        return None
+    
     word_to_negate = random.choice(candidate_words)
     
     if not word_to_negate:
