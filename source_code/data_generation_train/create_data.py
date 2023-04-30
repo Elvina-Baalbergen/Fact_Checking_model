@@ -11,7 +11,9 @@ from google.cloud import translate_v2 as translate
 
 # Constants
 PLOTDESCRIPTIONPATH = 'Plot_descriptions.json'
-CHUNKPATH = './Fact_Checking_model/data/processed/Text_chunks.pkl'
+REVIEWSPATH = './Fact_Checking_model/data/processed/reviews.csv'
+PLOT_CHUNKPATH = './Fact_Checking_model/data/processed/Text_chunks_plot.pkl'
+REVIEW_CHUNKPATH = './Fact_Checking_model/data/processed/Text_chunks_reviews.pkl'
 PAIR_CONSISTENT_PATH = './Fact_Checking_model/data/processed/Pair_Consistent.pkl'
 PAIR_UNRELATED_PATH = './Fact_Checking_model/data/processed/Pair_Unrelated.pkl'
 PAIR_CONSISTENT_BACKTRANSLATED_PATH = './Fact_Checking_model/data/processed/Pair_Consistent_Backtranslated.pkl'
@@ -24,6 +26,10 @@ class Chunk():
         self.MovieName = MovieName          # String: name of the movie
         self.Chunk = Chunk                  # String: content of the chunk
         self.NrTokens = NrTokens            # Integer: Number of Bert Tokens in the chunk
+
+    def __str__(self) -> str:
+        state = f"Type:{self.Type} ID:{self.ID} MovieName:{self.MovieName}"
+        return f"{state}\n\nChunk: {self.Chunk}\n\n\n" 
 
 
 class Pair():
@@ -40,33 +46,47 @@ class Pair():
         self.Chunk = Chunk                  # String: content of the chunk
     
     def __str__(self) -> str:
-        state = f"BACKTRANSLATED:{self.Backtranslate} NOISE:{self.Noise} AUGMENTATION:{self.Augmentation}"
+        state = f"TYPE:{self.Type } BACKTRANSLATED:{self.Backtranslate} NOISE:{self.Noise} AUGMENTATION:{self.Augmentation}"
         return f"{state}\n\nSENTENCE: {self.Sentence}\n\nCHUNK: {self.Chunk}\n\n\n" 
 
 # ALGORITHM             
 def main():
-    # Create Chunks from dataset if it doesn't already exist
-    chunks = None
-    if os.path.isfile(CHUNKPATH):
-        chunks =  load(CHUNKPATH)
+    # Create Chunks from Plot dataset if it doesn't already exist
+    plot_chunks = None
+    if os.path.isfile(PLOT_CHUNKPATH):
+        plot_chunks =  load(PLOT_CHUNKPATH)
     else:
-        dataset = load_data(PLOTDESCRIPTIONPATH)
-        chunks = divide_chunks(dataset)
-        save(chunks, CHUNKPATH)
+        dataset = load_json(PLOTDESCRIPTIONPATH)
+        plot_chunks = divide_chunks(dataset, "plot")
+        save(plot_chunks, PLOT_CHUNKPATH)
+
+
+    # Create Chunks from Reviews dataset if it doesn't already exist
+    review_chunks = None
+    if os.path.isfile(REVIEW_CHUNKPATH):
+        review_chunks =  load(REVIEW_CHUNKPATH)
+    else:
+        dataset = load_csv(REVIEWSPATH)
+        review_chunks = divide_chunks(dataset, "review")
+        save(review_chunks, REVIEW_CHUNKPATH)
 
     # Create Pairs from chunks if it doesn't already exist
     consistent_pairs = None
     if os.path.isfile(PAIR_CONSISTENT_PATH):
         consistent_pairs =  load(PAIR_CONSISTENT_PATH)
     else:
-        consistent_pairs = create_consistent_pairs(chunks)
+        consistent_pairs_reviews = create_consistent_pairs(review_chunks)
+        consistent_pairs_plot = create_consistent_pairs(plot_chunks)
+        consistent_pairs = consistent_pairs_reviews + consistent_pairs_plot
         save(consistent_pairs, PAIR_CONSISTENT_PATH)
 
     unrelated_pairs=None
     if os.path.isfile(PAIR_UNRELATED_PATH):
         unrelated_pairs =  load(PAIR_UNRELATED_PATH)
     else:
-        unrelated_pairs = create_unrelated_pairs(chunks)
+        consistent_pairs_reviews = create_unrelated_pairs(review_chunks)
+        consistent_pairs_plot = create_unrelated_pairs(plot_chunks)
+        unrelated_pairs = consistent_pairs_reviews + consistent_pairs_plot
         save(unrelated_pairs, PAIR_UNRELATED_PATH)
     
     # Backtranslate the consistent Pairs
@@ -78,13 +98,30 @@ def main():
         save(backtranslated_pairs, PAIR_CONSISTENT_BACKTRANSLATED_PATH)
 
     newpairs, unmodified_pairs = negate_sentence_Pairs(backtranslated_pairs)
-    
-    print(newpairs)
-    for pair in newpairs:
-        print(pair)
-    
 
-def load_data(filename):
+    for pair in backtranslated_pairs:
+       print(pair)
+
+def load_csv(filename):
+    '''
+    Load data
+    IN: filename
+    OUT: records in the dataset (plot / reviews)
+    in our case plots / movie reviews / metadata
+    '''  
+    dataset = []
+    dataset_df = pd.read_csv(filename)
+    for label, series in dataset_df.head(10).iterrows():
+        data_row_dict = series.to_dict()
+        data_row_dict['text'] = data_row_dict.pop('reviews')
+        data_row_dict['Movie name'] = data_row_dict.pop('title')
+        data_row_dict['id'] = None
+
+        dataset.append(data_row_dict)
+
+    return dataset
+
+def load_json(filename):
     '''
     Load data
     IN: filename
@@ -101,7 +138,7 @@ def load_data(filename):
 
     return dataset
 
-def divide_chunks(dataset, max_n_tokens = 390):
+def divide_chunks(dataset, type, max_n_tokens = 390):
     '''
     divide into chunks, only run if chunks do not exist yet
     IN: records in the dataset (plot / reviews)
@@ -130,7 +167,7 @@ def divide_chunks(dataset, max_n_tokens = 390):
             else:
                 # so its too long  now, what to do?
                 # save the old one, and tutn it into a proper chunk
-                myNewChunk = Chunk("plot", 31186339, 'The Hunger Games', current_chunk, current_chunk_len)
+                myNewChunk = Chunk(type, movie["id"], movie["Movie name"], current_chunk, current_chunk_len)
                 text_chunks.append(myNewChunk)
 
                 # start a new chunk
@@ -141,7 +178,7 @@ def divide_chunks(dataset, max_n_tokens = 390):
                 current_chunk_len += sentence_tokens
 
         #add last chunk which is not too long
-        myNewChunk = Chunk("plot", 31186339, 'The Hunger Games', current_chunk, current_chunk_len)
+        myNewChunk = Chunk(type, movie["id"], movie["Movie name"], current_chunk, current_chunk_len)
         text_chunks.append(myNewChunk) 
         moviesdone +=1
 
@@ -489,8 +526,6 @@ def negate_sentence(pair):
                 
             doc_Sentence_words[word_index] =  doc_Sentence_words[word_index] + " "   
 
-
-
     elif not is_negative:
         # choose negation to add
         negation = None
@@ -534,7 +569,6 @@ def negate_sentence_Pairs(pairs):
             transformed_pairs.append(returnedPair)
 
     return transformed_pairs, unmodified_pairs
-
 
 if __name__ == "__main__":
     main()
