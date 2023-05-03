@@ -3,7 +3,7 @@ import random
 import json
 import os
 
-import create_data as cd
+import create_data_train as cd
 #nlp = spacy.load('en_core_web_sm')
 
 def test_load_data():

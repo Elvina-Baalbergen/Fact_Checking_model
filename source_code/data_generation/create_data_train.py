@@ -1,14 +1,3 @@
-# Main function runnig this file will do allt the work needed to generate a training set.
-from transformers import BertTokenizer
-import numpy as np
-import pandas as pd
-import spacy
-import random
-import json
-import os
-import pickle
-from google.cloud import translate_v2 as translate
-
 # Constants
 PLOTDESCRIPTIONPATH = 'Plot_descriptions.json'
 REVIEWSPATH = './Fact_Checking_model/data/processed/reviews.csv'
@@ -57,6 +46,17 @@ class Pair():
 
 # ALGORITHM             
 def main():
+    # Main function runnig this file will do allt the work needed to generate a training set.
+    from transformers import BertTokenizer
+    import numpy as np
+    import pandas as pd
+    import spacy
+    import random
+    import json
+    import os
+    import pickle
+    from google.cloud import translate_v2 as translate
+    
     # Create Chunks from Plot dataset if it doesn't already exist
     plot_chunks = None
     if os.path.isfile(PLOT_CHUNKPATH):
