@@ -1,3 +1,12 @@
+from transformers import BertTokenizer
+import numpy as np
+import pandas as pd
+import spacy
+import random
+import json
+import os
+import pickle
+
 # Constants
 PLOTDESCRIPTIONPATH = 'Plot_descriptions.json'
 REVIEWSPATH = './Fact_Checking_model/data/processed/reviews.csv'
@@ -47,14 +56,6 @@ class Pair():
 # ALGORITHM             
 def main():
     # Main function runnig this file will do allt the work needed to generate a training set.
-    from transformers import BertTokenizer
-    import numpy as np
-    import pandas as pd
-    import spacy
-    import random
-    import json
-    import os
-    import pickle
     from google.cloud import translate_v2 as translate
     
     # Create Chunks from Plot dataset if it doesn't already exist
@@ -75,6 +76,7 @@ def main():
         review_chunks = divide_chunks(dataset, "review")
         save(review_chunks, REVIEW_CHUNKPATH)
 
+    '''
     # Create Pairs from chunks if it doesn't already exist
     consistent_pairs = None
     if os.path.isfile(PAIR_CONSISTENT_PATH):
@@ -119,6 +121,7 @@ def main():
 
     for pair in inconsisten_pairs:
        print(pair)
+    '''
 
 def load_csv(filename):
     '''
@@ -167,8 +170,9 @@ def divide_chunks(dataset, type, max_n_tokens = 390):
 
     text_chunks = []
     moviesdone = 0
+    totalmovies = len(dataset)
 
-    for movie in dataset[0:10]:
+    for movie in dataset:
         text = movie['text']
         doc = nlp(text)
         sentences = list(doc.sents)
@@ -199,6 +203,8 @@ def divide_chunks(dataset, type, max_n_tokens = 390):
         myNewChunk = Chunk(type, movie["id"], movie["Movie name"], current_chunk, current_chunk_len)
         text_chunks.append(myNewChunk) 
         moviesdone +=1
+
+        print(f"reviews: {moviesdone} : {totalmovies}", end='\r')
 
     return text_chunks
 
