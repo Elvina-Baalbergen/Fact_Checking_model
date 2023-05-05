@@ -1,13 +1,24 @@
 import spacy
+import pandas as pd
 import DSP 
 from Build_movies_db import MatchMoviesToQuerries
+import openai
+'''
+openai.api_key = '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'
+model_engine = 'text-davinci-002'
+prompt = "Recommend a heartbreaking movie about dogs"
+response = openai.Completion.create(
+    engine = model_engine,
+    prompt = prompt,
+    max_tokens = 8
+)
+print(response.choices[0].text)
+'''
 
-#prompting
-#input = [('Recommend a movie about dystopian future?', ['Hunger Games']), 
-#         ('Recommend a sad movie about dogs?', ['A Dogs Purpose']),
-#         ('Recommend a horror movie?', ['Scream']),
-#         ('Recommend a superhero action movie', ['Spider Man']),
-#         ('Recommend a dramatic movie about sports?', ['The Blind Side'])]
+queries = pd.read_csv('./Fact_Checking_model/data/raw/Queries.csv', delimiter = '\t', header = None, encoding='ISO-8859-1')
+
+queries_list = queries.values.tolist()
+
 
 
 
@@ -46,7 +57,7 @@ input = [ ('Kudos Danny! This film is the best film I\'ve seen all year. Hands d
         ]
 
 
-
+'''
 mylistofquerries = ['querry1', "querry2"]
 matches = MatchMoviesToQuerries(mylistofquerries)
 
@@ -57,4 +68,4 @@ querry = "sldjfbasjfvasdjfvafabdsfbasdjfbdjsdfvd"
 chunk1= "balalalsdasdasdfasdfsdafkasdjb" # get the actual stuff form the moviesDB
 chunk2 = "asdbfbkajsdbfasfasdffakjsdf"
 prompt = f"{examples} source1: {chunk1}\nsource2: {chunk2} {querry}"
-
+'''
