@@ -75,8 +75,7 @@ def main():
         dataset = load_csv(REVIEWSPATH)
         review_chunks = divide_chunks(dataset, "review")
         save(review_chunks, REVIEW_CHUNKPATH)
-
-    '''
+    
     # Create Pairs from chunks if it doesn't already exist
     consistent_pairs = None
     if os.path.isfile(PAIR_CONSISTENT_PATH):
@@ -95,7 +94,8 @@ def main():
         consistent_pairs_plot = create_unrelated_pairs(plot_chunks)
         unrelated_pairs = consistent_pairs_reviews + consistent_pairs_plot
         save(unrelated_pairs, PAIR_UNRELATED_PATH)
-    
+
+    '''
     # Backtranslate the consistent Pairs
     backtranslated_pairs = None
     if os.path.isfile(PAIR_CONSISTENT_BACKTRANSLATED_PATH):
@@ -132,7 +132,7 @@ def load_csv(filename):
     '''  
     dataset = []
     dataset_df = pd.read_csv(filename)
-    for label, series in dataset_df.head(10).iterrows():
+    for label, series in dataset_df.iterrows():
         data_row_dict = series.to_dict()
         data_row_dict['text'] = data_row_dict.pop('reviews')
         data_row_dict['Movie name'] = data_row_dict.pop('title')
@@ -229,12 +229,18 @@ def create_consistent_pairs(text_chunks):
     
     nlp = spacy.load("en_core_web_sm")
     pairs = []
+    chunksdone = 0
+    totalchunks = len(text_chunks)
 
     # Iterate over each text chunk
     for chunk in text_chunks:
         # Select a random sentence from the chunk
         doc = nlp(chunk.Chunk)
         sentences = list(doc.sents)
+
+        if len(sentences) <= 0:
+            continue
+
         sentence = str(random.choice(sentences))
 
         # Create a pair consisting of the selected sentence and the chunk
@@ -242,6 +248,9 @@ def create_consistent_pairs(text_chunks):
 
         # Add the pair to the list of pairs
         pairs.append(pair)
+        print(f"chunks: {chunksdone} : {totalchunks}", end='\r')
+        chunksdone += 1
+        
 
     return pairs
 
@@ -257,10 +266,17 @@ def create_unrelated_pairs(text_chunks):
     nlp = spacy.load("en_core_web_sm")
     unrelated_pairs = []
 
+    chunksdone = 0
+    totalchunks = len(text_chunks)
+
     for chunk in text_chunks:
         # Select a random sentence from the chunk
         doc = nlp(chunk.Chunk)
         sentences = list(doc.sents)
+        
+        if len(sentences) <= 0:
+            continue
+
         sentence = str(random.choice(sentences))
 
         # Select a random text chunk:
@@ -269,6 +285,8 @@ def create_unrelated_pairs(text_chunks):
         # Create an unrelated pair
         pair = Pair(chunk.Type, chunk.ID, chunk.MovieName, 'Unrelated', False, False, False, sentence, unrelated_chunk.Chunk)
         unrelated_pairs.append(pair)
+        print(f"chunks: {chunksdone} : {totalchunks}", end='\r')
+        chunksdone += 1
 
     return unrelated_pairs    
 

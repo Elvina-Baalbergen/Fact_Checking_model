@@ -1,11 +1,13 @@
-import tensorflow_hub as hub
 import os
-import tensorflow as tf
 import pickle 
 from create_data_train import Chunk, PLOT_CHUNKPATH, REVIEW_CHUNKPATH, save, load
 import numpy as np
+import pandas as pd
 
-MOVIEDB_PATH = './Fact_Checking_model/data/processed/MovieDB.pkl'
+MOVIEDB_PLOT_PATH = './Fact_Checking_model/data/processed/MovieDB_plot.pkl'
+MOVIEDB_REVIEW_PATH = './Fact_Checking_model/data/processed/MovieDB_review.pkl'
+RECOMMENDATIONS_PLOT_PATH = './Fact_Checking_model/data/processed/Recommendations_Plot.pkl'
+RECOMMENDATIONS_REVIEW_PATH = './Fact_Checking_model/data/processed/Recommendations_Review.pkl'
 
 class MovieRecord():
     def __init__(self, embeddings,chunk):
@@ -19,26 +21,37 @@ class Match():
 
 def main():
   # movieDB if not already exists
-  records = None
-  if os.path.isfile(MOVIEDB_PATH):
-      records =  load(MOVIEDB_PATH)
+  if os.path.isfile(MOVIEDB_PLOT_PATH) and os.path.isfile(MOVIEDB_REVIEW_PATH):
+    movierecords_Plots =  load(MOVIEDB_PLOT_PATH)
+    movierecords_Reviews = load(MOVIEDB_REVIEW_PATH)
   else:
-      records = Vectorize_movies()
-      save(records, MOVIEDB_PATH)
+    movierecords_Reviews, movierecords_Plots = Vectorize_movies()
+    save(movierecords_Reviews, MOVIEDB_PLOT_PATH)
+    save(movierecords_Plots, MOVIEDB_REVIEW_PATH)
 
-  querries = ['a fashion star has to save the world', 'something funny for kids']
-  matches = MatchMoviesToQuerries(querries,records, 3)
+  queries = pd.read_csv('./Fact_Checking_model/data/raw/Queries.csv', delimiter = '\t', header = None, encoding='ISO-8859-1')
+  queries_list = queries[0].tolist()
 
-  for match in matches:
+   # create best matches
+  if os.path.isfile(RECOMMENDATIONS_REVIEW_PATH) and os.path.isfile(RECOMMENDATIONS_PLOT_PATH):
+    matches_Review =  load(RECOMMENDATIONS_REVIEW_PATH)
+    matches_Plot = load(RECOMMENDATIONS_PLOT_PATH)
+  else:
+    matches_Review = MatchMoviesToQuerries(queries_list[:115],movierecords_Reviews, 1)
+    matches_Plot = MatchMoviesToQuerries(queries_list[115:],movierecords_Plots, 1)
+    save(matches_Review, RECOMMENDATIONS_REVIEW_PATH)
+    save(matches_Plot, RECOMMENDATIONS_PLOT_PATH)
+  
+  for match in matches_Review:
     print(match[0])
     for chunk in match[1]:
       print(chunk)
 
     print("\n\n\n\n")
-
+  
 def Vectorize_movies():
   embed = hub.KerasLayer("/home/niek/Elvina/Thesis/repo2/Fact_Checking_model/models/external/universal-sentence-encoder_4")
-
+  
   # vectorise Plots
   with open(PLOT_CHUNKPATH, 'rb') as f:
     plotchunks = pickle.load(f)   
@@ -54,6 +67,7 @@ def Vectorize_movies():
     chunksdone += 1
     print(f"plots: {chunksdone} : {number_of_plotchunks}", end='\r')
 
+  
   # vectorise Reviews
   with open(REVIEW_CHUNKPATH, 'rb') as f:
     reviewchunks = pickle.load(f)   
@@ -66,12 +80,10 @@ def Vectorize_movies():
     embeddings = embed([chunk.Chunk])
     record = MovieRecord(embeddings, chunk)
     movierecords_Reviews.append(record)
+    chunksdone += 1
     print(f"reviews: {chunksdone} : {number_of_reviewchunks}", end='\r')
-
-  # all records
-  records = movierecords_Reviews + movierecords_Plots
   
-  return records
+  return movierecords_Reviews, movierecords_Plots
 
 def FindBestChunks(movierecords, querry, numberofChunkstoReturn):
   # put my querrt into the embedding space
@@ -104,6 +116,8 @@ def MatchMoviesToQuerries(list_of_querries,movierecords, number_chunks_per_querr
   return list_of_matches
 
 if __name__ == "__main__":
+  import tensorflow as tf
+  import tensorflow_hub as hub
   main() 
 
 
