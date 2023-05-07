@@ -1,4 +1,5 @@
 from transformers import BertTokenizer, TFBertForSequenceClassification, DataCollatorWithPadding
+from sklearn.model_selection import train_test_split
 import datasets 
 import numpy as np
 import sys
@@ -18,18 +19,29 @@ model = TFBertForSequenceClassification.from_pretrained('bert-base-uncased', num
 data_collator = DataCollatorWithPadding(tokenizer=tokenizer, return_tensors="tf")
 
 def main():  
-  # transfrom Piar to dataset for training
-  consistent_pairs = load(PAIR_CONSISTENT_PATH)[:10000]
-  unrelated_pairs = load(PAIR_UNRELATED_PATH)[:10000]
+  # transfrom Piar to datasets for training
+  consistent_pairs = load(PAIR_CONSISTENT_PATH)[:1000]
+  unrelated_pairs = load(PAIR_UNRELATED_PATH)[:1000]
 
   consistent_pairs_df = pairs_to_df(consistent_pairs, 0)
   unrelated_pairs_df = pairs_to_df(unrelated_pairs, 1)
   merged_df = pd.concat([consistent_pairs_df, unrelated_pairs_df])
+  train_df, val_df = train_test_split(merged_df, test_size=0.1)
 
-  raw_dataset = datasets.Dataset.from_pandas(pd.DataFrame(data=merged_df))
-  tokenized_datasets = raw_dataset.map(preprocess)
+  train_dataset = datasets.Dataset.from_pandas(pd.DataFrame(data=train_df))
+  val_dataset = datasets.Dataset.from_pandas(pd.DataFrame(data=val_df))
+  tokenized_train_dataset = train_dataset.map(preprocess)
+  tokenized_val_dataset = val_dataset.map(preprocess)
 
-  tf_train_dataset = tokenized_datasets.to_tf_dataset(
+  tf_train_dataset = tokenized_train_dataset.to_tf_dataset(
+    columns=["attention_mask", "input_ids", "token_type_ids"],
+    label_cols=["Label"],
+    shuffle=True,
+    collate_fn=data_collator,
+    batch_size=4,
+  )
+
+  tf_val_dataset = tokenized_val_dataset.to_tf_dataset(
     columns=["attention_mask", "input_ids", "token_type_ids"],
     label_cols=["Label"],
     shuffle=True,
@@ -57,6 +69,7 @@ def main():
 
   model.fit(
     tf_train_dataset,
+    validation_data= tf_val_dataset,
     epochs=num_epochs
   ) 
 
@@ -73,11 +86,6 @@ def pairs_to_df(pairs, label):
 
 def preprocess(row):
   return tokenizer(row["Sentence"], row["Chunk"], truncation=True)
-
-def preprocess_pair(pair):
-  input_text = "[CLS]" + pair.Chunk + "[SEP]" + pair.Sentence + "[SEP]"
-
-  return input_text
 
 if __name__ == "__main__":
   main() 
