@@ -3,29 +3,32 @@ from sklearn.model_selection import train_test_split
 import datasets 
 import numpy as np
 import sys
-import pickle
+import os
 import pandas as pd
 import tensorflow as tf
 
 sys.path.append("/home/niek/Elvina/Thesis/repo2/Fact_Checking_model/source_code/data_generation")
 from create_data_train import save, load, Chunk, Pair
 
-PAIR_CONSISTENT_PATH = './Fact_Checking_model/data/processed/Pair_Consistent.pkl'
+PAIR_CONSISTENT_PATH = './Fact_Checking_model/data/processed/Pair_Consistent_Backtranslated.pkl'
 PAIR_UNRELATED_PATH = './Fact_Checking_model/data/processed/Pair_Unrelated.pkl'
+PAIR_INCONSISTENT_PATH = './Fact_Checking_model/data/processed/Pair_Inconsistent_Backtranslated.pkl'
+BERT_PATH = './Fact_Checking_model/models/bert_900'
 
 # Set tokenizer and model to global scope
 tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
-model = TFBertForSequenceClassification.from_pretrained('bert-base-uncased', num_labels=2)
 data_collator = DataCollatorWithPadding(tokenizer=tokenizer, return_tensors="tf")
 
 def main():  
   # transfrom Piar to datasets for training
-  consistent_pairs = load(PAIR_CONSISTENT_PATH)[:1000]
-  unrelated_pairs = load(PAIR_UNRELATED_PATH)[:1000]
+  consistent_pairs = load(PAIR_CONSISTENT_PATH)[:300]
+  unrelated_pairs = load(PAIR_UNRELATED_PATH)[:300]
+  inconsistent_pairs = load(PAIR_INCONSISTENT_PATH)[:300]
 
   consistent_pairs_df = pairs_to_df(consistent_pairs, 0)
   unrelated_pairs_df = pairs_to_df(unrelated_pairs, 1)
-  merged_df = pd.concat([consistent_pairs_df, unrelated_pairs_df])
+  inconsistent_pairs_df = pairs_to_df(inconsistent_pairs, 2)
+  merged_df = pd.concat([consistent_pairs_df, unrelated_pairs_df,inconsistent_pairs_df])
   train_df, val_df = train_test_split(merged_df, test_size=0.1)
 
   train_dataset = datasets.Dataset.from_pandas(pd.DataFrame(data=train_df))
@@ -49,29 +52,44 @@ def main():
     batch_size=4,
   )
 
-  # fit model
-  num_epochs = 3
-  num_train_steps = len(tf_train_dataset) * num_epochs
+  # fit model if not yet fitted
+  if not os.path.isfile(BERT_PATH+"/config.json"):
+    model = TFBertForSequenceClassification.from_pretrained('bert-base-uncased', num_labels=3)
 
-  lr_scheduler = tf.keras.optimizers.schedules.PolynomialDecay(
-    1e-5,
-    decay_steps=num_train_steps,
-    end_learning_rate=0.0,
-)
+    num_epochs = 3
+    num_train_steps = len(tf_train_dataset) * num_epochs
 
-  optimizer = tf.keras.optimizers.Adam(learning_rate=lr_scheduler)
+    lr_scheduler = tf.keras.optimizers.schedules.PolynomialDecay(
+      1e-5,
+      decay_steps=num_train_steps,
+      end_learning_rate=0.0,
+    )
 
-  model.compile(
-    optimizer= optimizer,
-    loss= tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
-    metrics=["accuracy"],
-  )
+    optimizer = tf.keras.optimizers.Adam(learning_rate=lr_scheduler)
 
-  model.fit(
-    tf_train_dataset,
-    validation_data= tf_val_dataset,
-    epochs=num_epochs
-  ) 
+    model.compile(
+      optimizer= optimizer,
+      loss= tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+      metrics=["accuracy"],
+    )
+
+    model.fit(
+      tf_train_dataset,
+      validation_data= tf_val_dataset,
+      epochs=num_epochs
+    ) 
+
+    model.save_pretrained(BERT_PATH, from_pt=True)
+  else:
+    model = TFBertForSequenceClassification.from_pretrained(BERT_PATH)
+
+  # evaluation
+
+  # 
+
+  # model preds
+  preds = model.predict(tf_val_dataset)["logits"]
+  class_preds = np.argmax(preds, axis=1)
 
 
 def pairs_to_df(pairs, label):
@@ -83,6 +101,7 @@ def pairs_to_df(pairs, label):
 
   df = pd.DataFrame(row_list, columns=['Sentence','Chunk',"Label"]) 
   return df
+
 
 def preprocess(row):
   return tokenizer(row["Sentence"], row["Chunk"], truncation=True)

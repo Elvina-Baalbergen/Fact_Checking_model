@@ -15,12 +15,16 @@ REVIEW_CHUNKPATH = './Fact_Checking_model/data/processed/Text_chunks_reviews.pkl
 PAIR_CONSISTENT_PATH = './Fact_Checking_model/data/processed/Pair_Consistent.pkl'
 PAIR_UNRELATED_PATH = './Fact_Checking_model/data/processed/Pair_Unrelated.pkl'
 PAIR_CONSISTENT_BACKTRANSLATED_PATH = './Fact_Checking_model/data/processed/Pair_Consistent_Backtranslated.pkl'
+PAIR_CONSISTENT_BACKTRANSLATED_MAIN_PATH = './Fact_Checking_model/data/processed/Pair_Consistent_Backtranslated_main.pkl'
 PAIR_INCONSISTENT_BACKTRANSLATED_PATH = './Fact_Checking_model/data/processed/Pair_Inconsistent_Backtranslated.pkl'
+PAIR_CONSISTENT_BACKTRANSLATED_PATH_TEMP = './Fact_Checking_model/data/processed/backtranslations/'
+
 
 PERCENT_PRONOUN = 0.25
 PERCENT_ENTITY = 0.25
 PERCENT_NEGATION = 0.25
 PERCENT_NOISE = 0.25
+
 
 # DATASTRUCTURES
 class Chunk():
@@ -38,16 +42,17 @@ class Chunk():
 
 class Pair():
     def __init__(self, type, ID, MovieName, TrueLabel, Backtranslate, Noise, Augmentation, Sentence, Chunk):
-        self.Type = type                    # String: plot or review
-        self.ID =  ID                       # Integer: WikiMovieID  
-        self.MovieName = MovieName          # String: name of the movie
-        self.TrueLabel = TrueLabel          # String: null, 'Consistent", "Inconsistent", "Unrelated"
-        self.Backtranslate = Backtranslate  # Boolean: true / false 
-        self.Noise = Noise                  # Boolean: true / false 
-        self.Augmentation = Augmentation    # String: pronouns, noise, negation, "PERSON", "NORP", "FAC", "ORG", "GPE", "LOC", "PRODUCT", "EVENT", 
-                                            #         "WORK_OF_ART", "LANGUAGE", "DATE", "TIME", "MONEY", "QUANTITY", "ORDINAL"
-        self.Sentence = Sentence            # String: a randomly chosen sentence from the chunk
-        self.Chunk = Chunk                  # String: content of the chunk
+        self.Type = type                        # String: plot or review
+        self.ID =  ID                           # Integer: WikiMovieID  
+        self.MovieName = MovieName              # String: name of the movie
+        self.TrueLabel = TrueLabel              # String: null, 'Consistent", "Inconsistent", "Unrelated"
+        self.Backtranslate = Backtranslate      # Boolean: true / false 
+        self.Noise = Noise                      # Boolean: true / false 
+        self.Augmentation = Augmentation        # String: pronouns, noise, negation, "PERSON", "NORP", "FAC", "ORG", "GPE", "LOC", "PRODUCT", "EVENT", 
+                                                #         "WORK_OF_ART", "LANGUAGE", "DATE", "TIME", "MONEY", "QUANTITY", "ORDINAL"
+        self.Sentence = Sentence                # String: a randomly chosen sentence from the chunk
+        self.Sentence_Backtranslated = None     # String: a randomly chosen sentence from the chunk
+        self.Chunk = Chunk                      # String: content of the chunk
     
     def __str__(self) -> str:
         state = f"TYPE:{self.Type } BACKTRANSLATED:{self.Backtranslate} NOISE:{self.Noise} AUGMENTATION:{self.Augmentation}"
@@ -55,9 +60,6 @@ class Pair():
 
 # ALGORITHM             
 def main():
-    # Main function runnig this file will do allt the work needed to generate a training set.
-    from google.cloud import translate_v2 as translate
-    
     # Create Chunks from Plot dataset if it doesn't already exist
     plot_chunks = None
     if os.path.isfile(PLOT_CHUNKPATH):
@@ -95,14 +97,22 @@ def main():
         unrelated_pairs = consistent_pairs_reviews + consistent_pairs_plot
         save(unrelated_pairs, PAIR_UNRELATED_PATH)
 
-    '''
+
     # Backtranslate the consistent Pairs
     backtranslated_pairs = None
     if os.path.isfile(PAIR_CONSISTENT_BACKTRANSLATED_PATH):
         backtranslated_pairs =  load(PAIR_CONSISTENT_BACKTRANSLATED_PATH)
     else:
-        backtranslated_pairs = backtranlate_Pairs(consistent_pairs)
+        backtranslated_pairs =  backtranlate_Pairs_batches(consistent_pairs, 100)
         save(backtranslated_pairs, PAIR_CONSISTENT_BACKTRANSLATED_PATH)
+    
+    # Write BackTranslated sentence to main
+    if os.path.isfile(PAIR_CONSISTENT_BACKTRANSLATED_MAIN_PATH):
+        backtranslated_pairs =  load(PAIR_CONSISTENT_BACKTRANSLATED_MAIN_PATH)
+    else:
+        for pair in backtranslated_pairs:
+            pair.Sentence = pair.Sentence_Backtranslated
+        save(backtranslated_pairs, PAIR_CONSISTENT_BACKTRANSLATED_MAIN_PATH)
 
     # Create Inconsistent examples
     inconsisten_pairs = None
@@ -111,17 +121,17 @@ def main():
     else:
         random.shuffle(backtranslated_pairs)
         pronoun_swapped_pairs, umodified_swappped_pairs = swap_pronouns_Pairs(backtranslated_pairs[:int(len(backtranslated_pairs) * PERCENT_PRONOUN)])
+        print(1)
         entity_swapped_pairs, unmodified_entity_swapped_pairs = swap_enitities_Pairs(backtranslated_pairs[int(len(backtranslated_pairs) * PERCENT_PRONOUN):int(len(backtranslated_pairs) * (PERCENT_ENTITY + PERCENT_PRONOUN))])
+        print(2)
         negated_pairs, unmodified_negated_pairs = negate_sentence_Pairs(backtranslated_pairs[int(len(backtranslated_pairs) * (PERCENT_PRONOUN + PERCENT_ENTITY)):int(len(backtranslated_pairs) * (PERCENT_PRONOUN + PERCENT_ENTITY + PERCENT_NEGATION))])
+        print(3)
         noise_pairs = add_noise_Pairs(backtranslated_pairs[int(len(backtranslated_pairs) * (PERCENT_PRONOUN + PERCENT_ENTITY + PERCENT_NEGATION)):int(len(backtranslated_pairs) * (PERCENT_PRONOUN + PERCENT_ENTITY + PERCENT_NEGATION + PERCENT_NOISE))])
+        print(4)
         inconsisten_pairs = pronoun_swapped_pairs + entity_swapped_pairs + negated_pairs + noise_pairs
         random.shuffle(inconsisten_pairs)
         
         save(inconsisten_pairs, PAIR_INCONSISTENT_BACKTRANSLATED_PATH)
-
-    for pair in inconsisten_pairs:
-       print(pair)
-    '''
 
 def load_csv(filename):
     '''
@@ -313,13 +323,110 @@ def backtranlate_Pairs(pairs):
     IN: pairs in a foreign language
     OUT: backtranslated pairs 
     '''
+    pairsdone = 0
+    totalpairs = len(pairs)
 
     for pair in pairs:
         pair.Sentence = backtranslate(pair.Sentence)
         pair.Backtranslate = True
 
+        print(f"chunks: {pairsdone} : {totalpairs}", end='\r')
+        pairsdone += 1
+        
     return pairs
 
+def backtranlate_Pairs_batches(pairs, batchsize):
+    os.environ["GOOGLE_APPLICATION_CREDENTIALS"]="./factchecking-384919-c2225d838536.json"
+    translator = translate.Client()
+    finalised_batches = []
+    matchingpairs = []
+    curentbatch = [] 
+    curentsize = len(curentbatch)
+    nr_batches_done = 0
+    nr_total_batches = int(len(pairs) / batchsize) + 1
+     
+    for pair in pairs:
+        if curentsize < (batchsize-1):
+            request = pair.Sentence
+            curentbatch.append(request)
+            matchingpairs.append(pair)
+            curentsize = len(curentbatch)
+        else:
+            #add current pair 
+            request = pair.Sentence
+            curentbatch.append(request)
+            matchingpairs.append(pair)
+
+            #forward pass
+            forward_translation = translator.translate(curentbatch, target_language="de")
+
+            forward_translation_texts = []
+            for translation in forward_translation:
+                forward_translation_texts.append(translation["translatedText"])
+            
+            #backward pass
+            backward_translation = translator.translate(forward_translation_texts, target_language="en")
+
+            backward_translation_texts = []
+            for translation in backward_translation:
+                backward_translation_texts.append(translation["translatedText"])
+
+            # join to pairs
+            for i in range(len(matchingpairs)):
+                matchingpairs[i].Sentence_Backtranslated = backward_translation_texts[i]
+
+            # store for later joining
+            finalised_batches.append(matchingpairs)   
+            nr_batches_done += 1
+
+            save(matchingpairs, PAIR_CONSISTENT_BACKTRANSLATED_PATH_TEMP + f"{pair.Type}_{nr_batches_done}_{nr_total_batches}")   
+            print(f"batches: {nr_batches_done} : {nr_total_batches}", end='\r')
+
+            #reset counters
+            matchingpairs = []
+            curentbatch = [] 
+            curentsize = len(curentbatch)
+
+
+            
+    
+    if len(curentbatch) > 0:
+        #forward pass
+        forward_translation = translator.translate(curentbatch, target_language="de")
+
+        forward_translation_texts = []
+        for translation in forward_translation:
+            forward_translation_texts.append(translation["translatedText"])
+        
+        #backward pass
+        backward_translation = translator.translate(forward_translation_texts, target_language="en")
+
+        backward_translation_texts = []
+        for translation in backward_translation:
+            backward_translation_texts.append(translation["translatedText"])
+
+        # join to pairs
+        for i in range(len(matchingpairs)):
+            matchingpairs[i].Sentence_Backtranslated = backward_translation_texts[i]
+
+        # store for later joining
+        finalised_batches.append(matchingpairs)   
+        nr_batches_done += 1
+
+        save(matchingpairs, PAIR_CONSISTENT_BACKTRANSLATED_PATH_TEMP + f"{pair.Type}_{nr_batches_done}_{nr_total_batches}")   
+        print(f"batches: {nr_batches_done} : {nr_total_batches}", end='\r')        
+
+    
+    save(finalised_batches, PAIR_CONSISTENT_BACKTRANSLATED_PATH_TEMP + "all_batches.pkl")
+
+    flattened_pairs = []
+    for batch in finalised_batches:
+        for pair in batch:
+            flattened_pairs.append(pair)
+    
+    save(flattened_pairs, "./temp.pkl")
+    return flattened_pairs
+            
 def swap_pronouns(pair):
     '''
     Take in a Pair, and replace all instances of a random pronoun, with another one.
@@ -381,12 +488,18 @@ def swap_pronouns_Pairs(pairs):
     transformed_pairs = []
     unmodified_pairs = []
 
+    done = 0
+    total = len(pairs)
+
     for pair in pairs:
         returnedPair = swap_pronouns(pair)
         if returnedPair == None:
             unmodified_pairs.append(pair)
         else:
             transformed_pairs.append(returnedPair)
+
+        done += 1
+        print(f"pronouns: {done} : {total}", end='\r')
 
     return transformed_pairs, unmodified_pairs
 
@@ -417,7 +530,7 @@ def swap_entities(pair):
     # ORDINAL:     “first”, “second”, etc.
 
     # Initiate Spacy object and pass it the sentence and chunk    
-    nlp = spacy.load("en_core_web_sm")
+ 
     doc_Sentence = nlp(pair.Sentence)
     doc_Chunk = nlp(pair.Chunk)
 
@@ -466,12 +579,18 @@ def swap_enitities_Pairs(pairs):
     transformed_pairs = []
     unmodified_pairs = []
 
+    done = 0
+    total = len(pairs)
+
     for pair in pairs:
         returnedPair = swap_entities(pair)
         if returnedPair == None:
             unmodified_pairs.append(pair)
         else:
             transformed_pairs.append(returnedPair)
+
+        done += 1
+        print(f"entities: {done} : {total}", end='\r')
 
     return transformed_pairs, unmodified_pairs
 
@@ -511,8 +630,14 @@ def add_noise(pair):
     return pair
 
 def add_noise_Pairs(pairs):
+    done = 0
+    total = len(pairs)
+
     for pair in pairs:
         pair = add_noise(pair)
+
+        done += 1
+        print(f"noise: {done} : {total}", end='\r')
 
     return pairs
     
@@ -606,6 +731,9 @@ def negate_sentence_Pairs(pairs):
     transformed_pairs = []
     unmodified_pairs = []
 
+    done = 0
+    total = len(pairs)
+
     for pair in pairs:
         returnedPair = negate_sentence(pair)
         if returnedPair == None:
@@ -613,7 +741,11 @@ def negate_sentence_Pairs(pairs):
         else:
             transformed_pairs.append(returnedPair)
 
+        done += 1
+        print(f"negate: {done} : {total}", end='\r')
+
     return transformed_pairs, unmodified_pairs
 
 if __name__ == "__main__":
+    from google.cloud import translate_v2 as translate
     main()
