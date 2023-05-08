@@ -10,10 +10,11 @@ import tensorflow as tf
 sys.path.append("/home/niek/Elvina/Thesis/repo2/Fact_Checking_model/source_code/data_generation")
 from create_data_train import save, load, Chunk, Pair
 
-PAIR_CONSISTENT_PATH = './Fact_Checking_model/data/processed/Pair_Consistent_Backtranslated.pkl'
-PAIR_UNRELATED_PATH = './Fact_Checking_model/data/processed/Pair_Unrelated.pkl'
-PAIR_INCONSISTENT_PATH = './Fact_Checking_model/data/processed/Pair_Inconsistent_Backtranslated.pkl'
-BERT_PATH = './Fact_Checking_model/models/bert_900'
+PAIR_CONSISTENT_PATH = './Fact_Checking_model/data/train/Pair_Consistent_Backtranslated_main.pkl'
+PAIR_UNRELATED_PATH = './Fact_Checking_model/data/train/Pair_Unrelated.pkl'
+PAIR_INCONSISTENT_PATH = './Fact_Checking_model/data/train/Pair_Inconsistent_Backtranslated.pkl'
+EVAL_PATH = './Fact_Checking_model/data/test/split00.xlsx'
+BERT_PATH = './Fact_Checking_model/models/bert_240000'
 
 # Set tokenizer and model to global scope
 tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
@@ -21,9 +22,9 @@ data_collator = DataCollatorWithPadding(tokenizer=tokenizer, return_tensors="tf"
 
 def main():  
   # transfrom Piar to datasets for training
-  consistent_pairs = load(PAIR_CONSISTENT_PATH)[:300]
-  unrelated_pairs = load(PAIR_UNRELATED_PATH)[:300]
-  inconsistent_pairs = load(PAIR_INCONSISTENT_PATH)[:300]
+  consistent_pairs = load(PAIR_CONSISTENT_PATH)[:80000]
+  unrelated_pairs = load(PAIR_UNRELATED_PATH)[:80000]
+  inconsistent_pairs = load(PAIR_INCONSISTENT_PATH)[:80000]
 
   consistent_pairs_df = pairs_to_df(consistent_pairs, 0)
   unrelated_pairs_df = pairs_to_df(unrelated_pairs, 1)
@@ -83,13 +84,29 @@ def main():
   else:
     model = TFBertForSequenceClassification.from_pretrained(BERT_PATH)
 
-  # evaluation
+  # test
+  df_test = pd.read_excel(EVAL_PATH)
+  df_test['TrueLabel'] = df_test['TrueLabel'].apply(label_to_int)
+  test_dataset = datasets.Dataset.from_pandas(pd.DataFrame(data=df_test))
+  tokenized_test_dataset = test_dataset.map(preprocess)
 
-  # 
+  tf_test_dataset = tokenized_test_dataset.to_tf_dataset(
+    columns=["attention_mask", "input_ids", "token_type_ids"],
+    collate_fn=data_collator,
+    batch_size=4,
+  )
 
   # model preds
-  preds = model.predict(tf_val_dataset)["logits"]
+  preds = model.predict(tf_test_dataset)["logits"]
   class_preds = np.argmax(preds, axis=1)
+
+  # 
+  df_test["model_label"] = class_preds
+
+  matches = (df_test['TrueLabel'] == df_test['model_label']).sum()
+
+  accuracy = matches / len(df_test)
+  print(accuracy)
 
 
 def pairs_to_df(pairs, label):
@@ -102,6 +119,17 @@ def pairs_to_df(pairs, label):
   df = pd.DataFrame(row_list, columns=['Sentence','Chunk',"Label"]) 
   return df
 
+def label_to_int(textlabel):
+  label = textlabel.lower()
+
+  if label[0] == 'c':
+    return 0
+  elif label[0] == 'u':
+    return 1
+  elif label[0] == 'i':
+    return 2
+  else:
+    return None
 
 def preprocess(row):
   return tokenizer(row["Sentence"], row["Chunk"], truncation=True)
