@@ -1,4 +1,5 @@
 from transformers import RobertaTokenizer, TFRobertaForSequenceClassification, DataCollatorWithPadding
+from sklearn.metrics import balanced_accuracy_score, accuracy_score, f1_score
 from sklearn.model_selection import train_test_split
 import datasets 
 import numpy as np
@@ -24,9 +25,9 @@ data_collator = DataCollatorWithPadding(tokenizer=tokenizer, return_tensors="tf"
 
 def main():  
   # transfrom Piar to datasets for training
-  consistent_pairs = load(PAIR_CONSISTENT_PATH)[:300]
-  unrelated_pairs = load(PAIR_UNRELATED_PATH)[:300]
-  inconsistent_pairs = load(PAIR_INCONSISTENT_PATH)[:300]
+  consistent_pairs = load(PAIR_CONSISTENT_PATH)[:80000]
+  unrelated_pairs = load(PAIR_UNRELATED_PATH)[:80000]
+  inconsistent_pairs = load(PAIR_INCONSISTENT_PATH)[:80000]
 
   consistent_pairs_df = pairs_to_df(consistent_pairs, 0)
   unrelated_pairs_df = pairs_to_df(unrelated_pairs, 1)
@@ -87,6 +88,22 @@ def main():
     model.save_pretrained(ROBERTA_PATH, from_pt=True)
   else:
     model = TFRobertaForSequenceClassification.from_pretrained(ROBERTA_PATH)
+  
+  # validation
+  tf_val_dataset = tokenized_val_dataset.to_tf_dataset(
+    columns=["attention_mask", "input_ids"],
+    label_cols=["Label"],
+    collate_fn=data_collator,
+    batch_size=4,
+  )
+
+  preds = model.predict(tf_val_dataset)["logits"] #tf_val_dataset, tf_test_dataset
+  class_preds = np.argmax(preds, axis=1)  
+  labels = val_df["Label"].to_numpy()
+
+  print(f"VALIDATION ACC = {accuracy_score(labels, class_preds)}")
+  print(f"VALIDATION bACC= {balanced_accuracy_score(labels, class_preds)}")
+  print(f"VALIDATION F1 = {f1_score(labels, class_preds, average='weighted')}")
 
   # test
   df_test0 = pd.read_excel(TEST0_PATH)
@@ -102,15 +119,14 @@ def main():
     batch_size=4,
   )
 
-  # model preds
-  preds = model.predict(tf_test_dataset)["logits"]
+  # test ACC
+  preds = model.predict(tf_test_dataset)["logits"] #tf_val_dataset, tf_test_dataset
   class_preds = np.argmax(preds, axis=1)
+  labels = df_test['TrueLabel'].to_numpy() 
 
-  # test results
-  df_test["model_label"] = class_preds
-  matches = (df_test['TrueLabel'] == df_test['model_label']).sum()
-  accuracy = matches / len(df_test)
-  print(accuracy)
+  print(f"TEST ACC = {accuracy_score(labels, class_preds)}")
+  print(f"TEST bACC = {balanced_accuracy_score(labels, class_preds)}")
+  print(f"TEST F1 = {f1_score(labels, class_preds, average='weighted')}")
 
   # save to file 
   df_test.to_csv(RESULT_PATH)

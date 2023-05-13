@@ -14,7 +14,11 @@ sys.path.append(LOCALPATH_DOLLY)
 from instruct_pipeline import InstructionTextGenerationPipeline
 
 TEST_SET_PATH = './Fact_Checking_model/data/test/test_set_pairs.pkl'
+TEST_SET_PATH_2 = './Fact_Checking_model/data/test/test_set_pairs_2.pkl'
+TEST_SET_PATH_3 = './Fact_Checking_model/data/test/test_set_pairs_3.pkl'
 TEST_SET_CSV_PATH = "./Fact_Checking_model/data/test/"
+TEST_SET_CSV_PATH_2 = "./Fact_Checking_model/data/test/"
+TEST_SET_CSV_PATH_3 = "./Fact_Checking_model/data/test/"
 
 def main():
     # loading dataset to generate from
@@ -27,12 +31,12 @@ def main():
     generate_text = InstructionTextGenerationPipeline(model=model, tokenizer=tokenizer)
 
       
-    if os.path.isfile(TEST_SET_PATH):
-        test_set =  load(TEST_SET_PATH)
+    if os.path.isfile(TEST_SET_PATH_3):
+        test_set =  load(TEST_SET_PATH_3)
     else:
         test_set = []
 
-        for match in matches_plot:
+        for match in matches_plot[150:200]:
             SearchQuerry = match[0]
             chunk = match[1][0] 
             print(chunk.MovieName)
@@ -51,7 +55,7 @@ def main():
             print("---------------------------------------------------------------------------\n\n")
 
 
-        for match in matches_reveiws:
+        for match in matches_reveiws[80:100]:
             SearchQuerry = match[0]
             chunk = match[1][0] 
             print(chunk.MovieName)
@@ -70,7 +74,7 @@ def main():
             print("---------------------------------------------------------------------------\n\n")
             
 
-        save(test_set,TEST_SET_PATH)
+        save(test_set,TEST_SET_PATH_3)
     
     save_to_annotaion_format(test_set, 2)
 
@@ -93,7 +97,7 @@ def buildprompt(SearchQuerry, chunk):
 
     context_3 ="Context: Moviename='home alone' Info=A group of paranormal investigators enter the abandoned home of pedophile and serial killer John Gacy, hoping to find evidence of paranormal activity.Upon entering the house they set up cameras throughout the abandoned house while going room to room with hand-held cameras, performing séances and asking for John Gacy to come forward.As the evening progresses it seems the investigators are not prepared for the horror still within the house.\n"
     question_3 = "Question: Looking for movies with actual scary ghosts and hauntings.\n"
-    answer_3 = "Answer: Sure! I would recommend watching 'home alone' as that has a group of paranormal investigators that enter an abandoned home of serial killer John Gacy hoping to find evidence of paranormal activity.\n\n"
+    answer_3 = "Answer: I would recommend watching 'home alone' as that has a group of paranormal investigators that enter an abandoned home of serial killer John Gacy hoping to find evidence of paranormal activity.\n\n"
     example3 = question_3 + context_3 + answer_3
 
     context_4 = "Context: Moviename='Maid to Order' Info=Rich and spoiled twenty something Jessie Montgomery  winds up in jail after a life of wild partying.Her father  decides he might have been better off without a daughter, and with that her 'fairy godmother' Stella  appears and creates an existence where she must make it on her own.Jessie is then forced to find work as a maid for an eccentric rich couple .The film is an unusual variation on the Cinderella formula: the fairy godmother is not the means to a better life for the heroine but rather the nemesis.Stella is Jessie's primary obstacle to achieving her wish of regaining her old spoiled Beverly Hills lifestyle.In the end, however, through her experiences with the other people in the mansion  Jessie learns the true meaning of love, friendship, and self-respect.When she chooses the happiness of her new friends over her own, she is rewarded with having her old life more or less returned to her.\n"
@@ -104,10 +108,11 @@ def buildprompt(SearchQuerry, chunk):
     # Dynamic part of prompt for the specific movie
     question_p = f"Question: {SearchQuerry}"
     context_p = f"Context: MovieName='{chunk.MovieName} Info={chunk.Chunk}'"
-    answer_p = f"Answer: I would recommend watching '{chunk.MovieName}' because"
+    #answer_p = f"Answer: I  recommend to watch '{chunk.MovieName}' "
+    answer_p = f"Answer: I'd recommend to watch  "
     predict =  question_p + context_p + answer_p
 
-    prompt = example1 + example2 + example3 + example4+ instruct + predict
+    prompt = example1 + example2 + example3 + example4 + instruct + predict 
 
     return prompt
 
@@ -117,7 +122,7 @@ def get_reccomendation(SearchQuerry,chunk,generate_text, max_tries):
         response = generate_text(prompt)
         response_text = response[0]["generated_text"]
 
-        if check_output_valid(response_text, chunk.MovieName):
+        if check_output_valid(response_text, chunk.MovieName): #and len(chunk) < 300:
             return response_text
     
     return None
@@ -130,10 +135,10 @@ def check_output_valid(response, moviename):
     lowercase_response = response.lower()
     moviename_used = moviename in response
     recommendation = ("recommend" in lowercase_response) or ("suggest" in lowercase_response) 
-    long_enough = len(response) > 200
-    no_prompt_keywords = not (("step by step" in response) or ("Question:" in response)) 
+    long_enough = len(response) > 300
+    no_prompt_keywords = not (("step by step" in response) or ("Question:" in response) or ("Sure" in response) or ("Answer:" in response)) 
     
-    return moviename_used and recommendation and long_enough and no_prompt_keywords
+    return moviename_used  and long_enough and no_prompt_keywords #and recommendation
 
 def create_pairs_test(chunk, recommendation):    
     nlp = spacy.load("en_core_web_sm")
@@ -159,7 +164,7 @@ def save_to_annotaion_format(test_set, number_splits):
     split_dfs =  np.array_split(df, number_splits)
 
     for i in range(len(split_dfs)):
-        split_dfs[i].to_csv(TEST_SET_CSV_PATH + f"split_{i}.csv", sep = '\t')
+        split_dfs[i].to_csv(TEST_SET_CSV_PATH_3 + f"split_part_3_{i}.csv", sep = '\t')
 
 if __name__ == "__main__":
   main() 
