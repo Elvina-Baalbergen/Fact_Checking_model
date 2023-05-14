@@ -25,9 +25,9 @@ data_collator = DataCollatorWithPadding(tokenizer=tokenizer, return_tensors="tf"
 
 def main():  
   # transfrom Piar to datasets for training
-  consistent_pairs = load(PAIR_CONSISTENT_PATH)[:80000]
-  unrelated_pairs = load(PAIR_UNRELATED_PATH)[:80000]
-  inconsistent_pairs = load(PAIR_INCONSISTENT_PATH)[:80000]
+  consistent_pairs = load(PAIR_CONSISTENT_PATH)[:80]
+  unrelated_pairs = load(PAIR_UNRELATED_PATH)[:800]
+  inconsistent_pairs = load(PAIR_INCONSISTENT_PATH)[:800]
 
   consistent_pairs_df = pairs_to_df(consistent_pairs, 0)
   unrelated_pairs_df = pairs_to_df(unrelated_pairs, 1)
@@ -129,6 +129,7 @@ def main():
   print(f"TEST F1 = {f1_score(labels, class_preds, average='weighted')}")
 
   # save to file 
+  df_test["model_label"] = class_preds
   df_test.to_csv(RESULT_PATH)
 
 def pairs_to_df(pairs, label):

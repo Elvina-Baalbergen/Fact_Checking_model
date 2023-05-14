@@ -1,5 +1,5 @@
 import pandas as pd
-from sklearn.metrics import balanced_accuracy_score, accuracy_score, confusion_matrix
+from sklearn.metrics import balanced_accuracy_score, accuracy_score, confusion_matrix, f1_score
 import seaborn as sns
 import matplotlib.pyplot as plt
 
@@ -114,8 +114,10 @@ labels_review  = df_bert_review['TrueLabel'].to_numpy()
 
 balanced_accuracy_plot= balanced_accuracy_score(labels_plot, predictions_plot)
 accuracy_plot = accuracy_score(labels_plot, predictions_plot)
+f1_plot = f1_score(labels_plot, predictions_plot, average='weighted')
 
 balanced_accuracy_review = balanced_accuracy_score(labels_review, predictions_review)
 accuracy_reviews = accuracy_score(labels_review, predictions_review)
+f1_reviews = f1_score(labels_review, predictions_review, average='weighted')
 
-print([accuracy_plot, balanced_accuracy_plot, accuracy_reviews, balanced_accuracy_review])
+print([f1_plot, accuracy_plot, balanced_accuracy_plot, f1_reviews, accuracy_reviews, balanced_accuracy_review])
