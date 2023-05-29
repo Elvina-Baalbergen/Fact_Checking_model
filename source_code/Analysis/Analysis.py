@@ -72,26 +72,26 @@ data = pd.DataFrame({'Classes': classes, 'Total': total_nr, "Correct":total_nr_c
 sns.barplot(x='Classes', y='Total', data=data, color='grey', alpha=0.5, label='Total')
 sns.barplot(x='Classes', y='Correct', data=data, color='green', alpha=0.7, label='Correct')
 
-plt.xlabel('Classes', fontsize= 20)
-plt.ylabel('Amount', fontsize= 20)
+plt.xlabel('Types', fontsize= 20)
+plt.ylabel('Count', fontsize= 20)
 plt.xticks(fontsize=20)  
 plt.yticks(fontsize=20) 
-plt.title('Total Number of Inconsistencies by Class', fontsize=26)
+plt.title('Total number of inconsistencies by type', fontsize=26)
 plt.legend(fontsize=20)
 plt.show()
 
 # Confusion matrix
 class_names = ['Consistent', 'Unrelated', 'Inconsistent']  # Replace with your actual class names
 sns.heatmap(cm_BERT, annot=True, cmap='Blues', fmt='d', cbar=False, xticklabels=class_names, yticklabels=class_names, annot_kws={'fontsize': 16})
-plt.xlabel('Predicted Labels', fontsize=16)
-plt.ylabel('True Labels', fontsize=16)
+plt.xlabel('Predicted Labels', fontsize=20)
+plt.ylabel('True Labels', fontsize=20)
 plt.title('Confusion Matrix BERT', fontsize=16)
-plt.xticks(fontsize=16)  
-plt.yticks(fontsize=16)  
+plt.xticks(fontsize=20)  
+plt.yticks(fontsize=20)  
 plt.tight_layout()
 plt.show()
 
-
+'''
 # graphs - RoBERTa
 class_names = ['Consistent', 'Unrelated', 'Inconsistent']  # Replace with your actual class names
 sns.heatmap(cm_ROBERTA, annot=True, cmap='Blues', fmt='d', cbar=False, xticklabels=class_names, yticklabels=class_names, annot_kws={'fontsize': 16})
@@ -101,7 +101,7 @@ plt.title('Confusion Matrix RoBERTa', fontsize=16)
 plt.xticks(fontsize=16)  
 plt.yticks(fontsize=16)  
 plt.show()
-
+'''
 # Plot vs Reviews
 print(df_bert)
 df_bert_plot = df_bert[df_bert["Type"] == "plot"]
@@ -114,10 +114,10 @@ labels_review  = df_bert_review['TrueLabel'].to_numpy()
 
 balanced_accuracy_plot= balanced_accuracy_score(labels_plot, predictions_plot)
 accuracy_plot = accuracy_score(labels_plot, predictions_plot)
-f1_plot = f1_score(labels_plot, predictions_plot, average='weighted')
+f1_plot = f1_score(labels_plot, predictions_plot, average='macro')
 
 balanced_accuracy_review = balanced_accuracy_score(labels_review, predictions_review)
 accuracy_reviews = accuracy_score(labels_review, predictions_review)
-f1_reviews = f1_score(labels_review, predictions_review, average='weighted')
+f1_reviews = f1_score(labels_review, predictions_review, average='macro')
 
 print([f1_plot, accuracy_plot, balanced_accuracy_plot, f1_reviews, accuracy_reviews, balanced_accuracy_review])

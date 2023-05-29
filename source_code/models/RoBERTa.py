@@ -14,7 +14,7 @@ from create_data_train import save, load, Chunk, Pair
 PAIR_CONSISTENT_PATH = './Fact_Checking_model/data/train/Pair_Consistent_Backtranslated_main.pkl'
 PAIR_UNRELATED_PATH = './Fact_Checking_model/data/train/Pair_Unrelated.pkl'
 PAIR_INCONSISTENT_PATH = './Fact_Checking_model/data/train/Pair_Inconsistent_Backtranslated.pkl'
-ROBERTA_PATH = './Fact_Checking_model/models/roberta_240000'
+ROBERTA_PATH = './Fact_Checking_model/models/roberta_9000'
 TEST0_PATH = './Fact_Checking_model/data/test/split00.xlsx'
 TEST1_PATH = './Fact_Checking_model/data/test/split1.xlsx'
 RESULT_PATH = './Fact_Checking_model/data/test/Roberta.csv'
@@ -25,9 +25,9 @@ data_collator = DataCollatorWithPadding(tokenizer=tokenizer, return_tensors="tf"
 
 def main():  
   # transfrom Piar to datasets for training
-  consistent_pairs = load(PAIR_CONSISTENT_PATH)[:80]
-  unrelated_pairs = load(PAIR_UNRELATED_PATH)[:800]
-  inconsistent_pairs = load(PAIR_INCONSISTENT_PATH)[:800]
+  consistent_pairs = load(PAIR_CONSISTENT_PATH)[:3000]
+  unrelated_pairs = load(PAIR_UNRELATED_PATH)[:3000]
+  inconsistent_pairs = load(PAIR_INCONSISTENT_PATH)[:3000]
 
   consistent_pairs_df = pairs_to_df(consistent_pairs, 0)
   unrelated_pairs_df = pairs_to_df(unrelated_pairs, 1)
@@ -103,7 +103,7 @@ def main():
 
   print(f"VALIDATION ACC = {accuracy_score(labels, class_preds)}")
   print(f"VALIDATION bACC= {balanced_accuracy_score(labels, class_preds)}")
-  print(f"VALIDATION F1 = {f1_score(labels, class_preds, average='weighted')}")
+  print(f"VALIDATION F1 = {f1_score(labels, class_preds, average='macro')}")
 
   # test
   df_test0 = pd.read_excel(TEST0_PATH)
@@ -126,7 +126,7 @@ def main():
 
   print(f"TEST ACC = {accuracy_score(labels, class_preds)}")
   print(f"TEST bACC = {balanced_accuracy_score(labels, class_preds)}")
-  print(f"TEST F1 = {f1_score(labels, class_preds, average='weighted')}")
+  print(f"TEST F1 = {f1_score(labels, class_preds, average='macro')}")
 
   # save to file 
   df_test["model_label"] = class_preds

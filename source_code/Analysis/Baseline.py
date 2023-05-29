@@ -32,9 +32,9 @@ def main():
 
     balanced_accuracy = balanced_accuracy_score(labels, predictions)
     accuracy = accuracy_score(labels, predictions)
-    f1 =  f1_score(labels, predictions, average='weighted')
+    f1 =  f1_score(labels, predictions, average='macro')
 
-    print(f"cGPT: acc: {accuracy} bAcc:{balanced_accuracy} f1:{f1}")
+    print(f"cGPT: acc: {accuracy} bAcc:{balanced_accuracy} f1_macro:{f1}")
 
     # random chance
     labels =  df_test.apply(lambda row: label_to_int(row['TrueLabel']), axis=1).to_numpy()
@@ -42,9 +42,9 @@ def main():
 
     balanced_accuracy = balanced_accuracy_score(labels, random_predictions)
     accuracy = accuracy_score(labels, random_predictions)
-    f1 =  f1_score(labels, random_predictions, average='weighted')
+    f1 =  f1_score(labels, random_predictions, average='macro')
 
-    print(f"Random: acc: {accuracy} bAcc:{balanced_accuracy} f1:{f1}")
+    print(f"Random: acc: {accuracy} bAcc:{balanced_accuracy} f1_macro:{f1}")
 
 
 def get_label(row):
